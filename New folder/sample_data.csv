@@ -1,0 +1,27 @@
+id,name,age,salary,department,join_date,email,performance_score
+1,John Smith,32,75000,Engineering,2020-01-15,john@company.com,88
+2,jane doe,28,82000,Marketing,15/01/2020,jane@company.com,91
+3,Bob Johnson,45,95000,Engineering,2019-03-20,bob@company.com,76
+1,John Smith,32,75000,Engineering,2020-01-15,john@company.com,88
+4,Alice Brown,31,78000,HR,2021-07-10,alice@company.com,84
+5,charlie wilson,37,68000,MARKETING,2018-11-05,charlie@company.com,79
+6,David Lee,29,,Engineering,2022-02-28,david@company.com,92
+7,Emma Taylor,35,88000,HR,,emma@company.com,87
+8,Frank Miller,52,950000,Engineering,2017-06-15,frank@company.com,73
+9,Grace Chen,27,72000,Marketing,2023-01-10,grace@company.com,95
+10,,41,79000,Marketing,2019-08-22,,82
+11,Henry Brown,38,83000,Engineering,2020-11-30,henry@company.com,
+12,Isabella Martinez,26,65000,HR,03/15/2021,isabella@company.com,88
+13,Jack Wilson,44,91000,Engineering,2016-04-18,jack@company.com,77
+14,Kate Davis,33,77000,marketing,04-12-2022, kate@company.com,83
+15,Liam Anderson,29,73000,HR,2022-09-05,liam@company.com,90
+16,MIA THOMPSON,36,84000,ENGINEERING,2020-05-20,mia@company.com,86
+17,Noah Garcia,31,-5000,Marketing,2021-03-15,noah@company.com,71
+18,Olivia Rodriguez,49,87000,Engineering,2015-10-10,olivia@company.com,94
+19,Peter Kim,28,,HR,2023-04-01,peter@company.com,89
+20,Quinn Lee,43,92000,Engineering,2017-08-25,quinn@company.com,81
+21,Rachel Scott,38,76000,Marketing,2019-12-01,rachel@company.com,85
+22,Sam Torres,27,69000,HR,11/30/2022,sam@company.com,
+23,Tina Hall,34,81000,engineering,2021-06-14,tina@company.com,93
+24,Umar Khan,40,88000,Engineering,2018-07-09,umar@company.com,78
+25, Victor Patel,31,74000,Marketing,2022-03-17, victor@company.com,88

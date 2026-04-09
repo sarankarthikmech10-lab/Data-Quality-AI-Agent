@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="AI-powered data quality analysis — runs entirely in your browser.">
+<title>Data Quality AI Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#060d1f;--surface:#0d1b35;--card:rgba(255,255,255,.045);--cardH:rgba(255,255,255,.075);
+  --border:rgba(255,255,255,.09);--blue:#4d9fff;--blueD:#2d7be8;--green:#00e5a0;--greenD:#00b87a;
+  --purple:#a855f7;--amber:#fbbf24;--t1:#f0f4ff;--t2:rgba(240,244,255,.6);--t3:rgba(240,244,255,.32);
+  --hi:#ff4757;--med:#ffa502;--lo:#2ed573;
+  --rs:8px;--rm:14px;--rl:20px;--rxl:28px;
+  --ease:cubic-bezier(.4,0,.2,1);--tr:all .3s var(--ease);
+  --sh:0 8px 32px rgba(0,0,0,.42);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;line-height:1.6;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;
+  background:radial-gradient(ellipse 80% 60% at 20% -10%,rgba(77,159,255,.11) 0%,transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 110%,rgba(0,229,160,.07) 0%,transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 50%,rgba(168,85,247,.04) 0%,transparent 70%);}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(77,159,255,.25);border-radius:99px}
+h1,h2,h3,h4{font-weight:700;letter-spacing:-.02em;line-height:1.2}
+p{color:var(--t2)}
+.grad{background:linear-gradient(135deg,var(--blue),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+/* Header */
+.hdr{position:sticky;top:0;z-index:200;height:62px;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;background:rgba(6,13,31,.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.05rem}
+.logo-icon{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--blue),var(--green));display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.status-pill{display:flex;align-items:center;gap:6px;padding:.28rem .8rem;border-radius:99px;background:var(--card);border:1px solid var(--border);font-size:.74rem;color:var(--t2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+
+.main{max-width:1300px;margin:0 auto;padding:2rem 1.5rem 5rem}
+
+/* Wizard nav */
+.wizard-nav{display:flex;align-items:center;justify-content:space-between;position:relative;margin-bottom:2.5rem;padding:1.4rem 2rem;background:var(--card);border:1px solid var(--border);border-radius:var(--rl);backdrop-filter:blur(12px)}
+.wizard-nav::before{content:'';position:absolute;top:calc(50% - 1px);left:3.5rem;right:3.5rem;height:2px;background:var(--border);z-index:0}
+.si{display:flex;flex-direction:column;align-items:center;gap:7px;position:relative;z-index:1;flex:1;cursor:pointer;transition:var(--tr)}
+.sc{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:600;border:2px solid var(--border);background:var(--surface);transition:var(--tr);position:relative}
+.si.active .sc{border-color:var(--blue);background:linear-gradient(135deg,var(--blue),var(--blueD));box-shadow:0 0 24px rgba(77,159,255,.42)}
+.si.active .sc::after{content:'';position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--blue);opacity:.4;animation:ring 2s infinite}
+@keyframes ring{0%{opacity:.4;transform:scale(1)}100%{opacity:0;transform:scale(1.45)}}
+.si.done .sc{border-color:var(--green);background:rgba(0,229,160,.15);color:var(--green)}
+.sl{font-size:.7rem;font-weight:500;color:var(--t3);text-align:center;transition:var(--tr);white-space:nowrap}
+.si.active .sl{color:var(--blue);font-weight:600}
+.si.done .sl{color:var(--green)}
+
+/* Panels */
+.panel{display:none;animation:fadeUp .4s var(--ease)}
+.panel.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--rl);backdrop-filter:blur(12px);padding:1.5rem;transition:var(--tr)}
+.card:hover{border-color:rgba(77,159,255,.2);background:var(--cardH)}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.card-title{display:flex;align-items:center;gap:10px;font-size:1rem;font-weight:600}
+.c-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;background:rgba(77,159,255,.15)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:.6rem 1.25rem;border-radius:var(--rm);font-size:.875rem;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:var(--tr);white-space:nowrap}
+.btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none}
+.btn-p{background:linear-gradient(135deg,var(--blue),var(--blueD));color:#fff;box-shadow:0 4px 18px rgba(77,159,255,.28)}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(77,159,255,.4)}
+.btn-s{background:linear-gradient(135deg,var(--green),var(--greenD));color:#060d1f;box-shadow:0 4px 18px rgba(0,229,160,.28)}
+.btn-s:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,229,160,.4)}
+.btn-o{background:transparent;color:var(--t2);border:1px solid var(--border)}
+.btn-o:hover{border-color:var(--blue);color:var(--blue);background:rgba(77,159,255,.06)}
+.btn-lg{padding:.875rem 2rem;font-size:1rem;border-radius:var(--rl)}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:.22rem .6rem;border-radius:99px;font-size:.68rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.b-hi{background:rgba(255,71,87,.15);color:var(--hi);border:1px solid rgba(255,71,87,.3)}
+.b-med{background:rgba(255,165,2,.15);color:var(--med);border:1px solid rgba(255,165,2,.3)}
+.b-lo{background:rgba(46,213,115,.15);color:var(--lo);border:1px solid rgba(46,213,115,.3)}
+.b-info{background:rgba(77,159,255,.15);color:var(--blue);border:1px solid rgba(77,159,255,.3)}
+.b-miss{background:rgba(168,85,247,.15);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
+.b-dup{background:rgba(251,191,36,.15);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+.b-out{background:rgba(255,71,87,.15);color:var(--hi);border:1px solid rgba(255,71,87,.3)}
+.b-fmt{background:rgba(0,229,160,.15);color:var(--green);border:1px solid rgba(0,229,160,.3)}
+.ml-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;background:rgba(168,85,247,.15);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
+
+/* Progress bar */
+.pbar{height:5px;border-radius:99px;background:var(--border);overflow:hidden}
+.pfill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--green));transition:width .8s var(--ease);position:relative}
+.pfill::after{content:'';position:absolute;top:0;right:0;width:36px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4));animation:shimmer 2s infinite}
+@keyframes shimmer{0%{transform:translateX(-36px);opacity:0}50%{opacity:1}100%{transform:translateX(100px);opacity:0}}
+
+/* Stats strip */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:1rem;margin-bottom:1.5rem}
+.strip-i{background:var(--card);border:1px solid var(--border);border-radius:var(--rm);padding:1rem 1.1rem;display:flex;align-items:center;gap:.75rem;transition:var(--tr)}
+.strip-i:hover{border-color:rgba(77,159,255,.2);transform:translateY(-2px);box-shadow:var(--sh)}
+.s-icon{width:40px;height:40px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.s-val{font-size:1.3rem;font-weight:800;line-height:1}
+.s-lbl{font-size:.68rem;color:var(--t3);text-transform:uppercase;letter-spacing:.05em}
+
+/* Misc */
+.sec-title{font-size:.95rem;font-weight:700;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.abar{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 1.5rem;margin-top:1.5rem;background:var(--card);border:1px solid var(--border);border-radius:var(--rl);backdrop-filter:blur(10px)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+@media(max-width:700px){.g2{grid-template-columns:1fr}}
+
+/* Loading */
+.ldr{display:none;position:fixed;inset:0;background:rgba(6,13,31,.88);backdrop-filter:blur(10px);z-index:1000;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem}
+.ldr.on{display:flex}
+.spinner{width:54px;height:54px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--blue);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ldr-t{font-size:1rem;font-weight:600}
+.ldr-s{font-size:.82rem;color:var(--t3)}
+
+/* Toast */
+.toasts{position:fixed;bottom:1.5rem;right:1.5rem;z-index:1100;display:flex;flex-direction:column;gap:.5rem;pointer-events:none}
+.toast{padding:.85rem 1.2rem;border-radius:var(--rm);font-size:.83rem;font-weight:500;backdrop-filter:blur(12px);border:1px solid var(--border);display:flex;align-items:center;gap:8px;max-width:360px;pointer-events:auto;box-shadow:0 10px 40px rgba(0,0,0,.4);animation:slideR .3s var(--ease)}
+@keyframes slideR{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.toast.ok{background:rgba(0,229,160,.14);border-color:rgba(0,229,160,.3);color:var(--green)}
+.toast.er{background:rgba(255,71,87,.14);border-color:rgba(255,71,87,.3);color:var(--hi)}
+.toast.nf{background:rgba(77,159,255,.14);border-color:rgba(77,159,255,.3);color:var(--blue)}
+.empty{text-align:center;padding:3rem 2rem;color:var(--t3)}
+.empty .eicon{font-size:3rem;margin-bottom:1rem}
+.empty h3{font-size:1.1rem;color:var(--t2);margin-bottom:.5rem}
+
+/* Table */
+.twrap{overflow-x:auto;border-radius:var(--rm);border:1px solid var(--border)}
+.dtable{width:100%;border-collapse:collapse;font-size:.82rem}
+.dtable th{padding:.65rem 1rem;text-align:left;background:rgba(255,255,255,.03);font-weight:600;color:var(--t3);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap;font-family:'JetBrains Mono',monospace}
+.dtable td{padding:.58rem 1rem;border-bottom:1px solid rgba(255,255,255,.03);color:var(--t2);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.dtable tr:last-child td{border-bottom:none}
+.dtable tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Step 1 */
+.up-wrap{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:800px){.up-wrap{grid-template-columns:1fr}}
+.dropzone{border:2px dashed var(--border);border-radius:var(--rxl);padding:3rem 2rem;text-align:center;cursor:pointer;transition:var(--tr);background:var(--card);position:relative;min-height:268px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem}
+.dropzone:hover,.dropzone.over{border-color:var(--blue);background:rgba(77,159,255,.05);box-shadow:0 0 30px rgba(77,159,255,.1)}
+.dz-icon{width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,rgba(77,159,255,.2),rgba(0,229,160,.2));display:flex;align-items:center;justify-content:center;font-size:2rem;animation:float 3.2s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.fmt-pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.fpill{padding:.18rem .55rem;border-radius:99px;font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;background:var(--surface);border:1px solid var(--border);color:var(--t3)}
+.divider{display:flex;align-items:center;gap:1rem;margin:.9rem 0}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.divider span{font-size:.74rem;color:var(--t3);white-space:nowrap}
+.demo-btn{width:100%;justify-content:center;border-style:dashed !important;gap:8px;padding:.9rem 1.25rem}
+.demo-btn.loaded{border-color:var(--green) !important;color:var(--green) !important}
+.up-cfg{display:flex;flex-direction:column;gap:1rem}
+.mode-card{background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:1.4rem}
+.mode-card h3{font-size:.95rem;margin-bottom:.25rem}
+.mopts{display:flex;flex-direction:column;gap:.65rem;margin-top:.9rem}
+.mopt{display:flex;align-items:flex-start;gap:12px;padding:.9rem 1rem;border-radius:var(--rm);border:2px solid var(--border);cursor:pointer;transition:var(--tr);background:transparent;text-align:left}
+.mopt.sel{border-color:var(--blue);background:rgba(77,159,255,.07)}
+.mopt input{display:none}
+.micon{width:36px;height:36px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;background:var(--surface)}
+.mcont h4{font-size:.88rem;margin-bottom:2px}
+.mcont p{font-size:.76rem}
+.fi-box{display:flex;align-items:center;gap:12px;padding:.9rem 1.2rem;background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:var(--rm)}
+.fi-box .fii{font-size:1.5rem;flex-shrink:0}
+.fi-box h4{font-size:.9rem;margin-bottom:1px;word-break:break-all}
+.mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
+.msc{background:var(--card);border:1px solid var(--border);border-radius:var(--rm);padding:.9rem;text-align:center}
+.msv{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,var(--blue),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.msl{font-size:.68rem;color:var(--t3);text-transform:uppercase;letter-spacing:.05em}
+
+/* Step 2 */
+.profgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:1rem}
+.colcard{background:var(--card);border:1px solid var(--border);border-radius:var(--rm);padding:1.1rem;transition:var(--tr)}
+.colcard:hover{border-color:rgba(77,159,255,.28);transform:translateY(-2px);box-shadow:var(--sh)}
+.col-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem}
+.cname{font-size:.87rem;font-weight:600;font-family:'JetBrains Mono',monospace}
+.tbadge{font-size:.62rem;font-weight:600;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em}
+.tn{background:rgba(77,159,255,.15);color:var(--blue)}
+.tc{background:rgba(168,85,247,.15);color:var(--purple)}
+.td{background:rgba(0,229,160,.15);color:var(--green)}
+.tb{background:rgba(251,191,36,.15);color:var(--amber)}
+.cstats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)}
+.csl{font-size:.63rem;color:var(--t3);text-transform:uppercase}
+.csv2{font-size:.78rem;font-weight:600}
+.chartbox{position:relative;height:240px;width:100%}
+
+/* Step 3 */
+.ftbar{display:flex;align-items:center;gap:.65rem;margin-bottom:1.2rem;flex-wrap:wrap}
+.fb{padding:.35rem .85rem;border-radius:99px;font-size:.73rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--t2);transition:var(--tr);font-family:inherit}
+.fb:hover,.fb.on{background:rgba(77,159,255,.1);border-color:var(--blue);color:var(--blue)}
+.fb[data-sev=High].on{background:rgba(255,71,87,.1);border-color:var(--hi);color:var(--hi)}
+.fb[data-sev=Medium].on{background:rgba(255,165,2,.1);border-color:var(--med);color:var(--med)}
+.fb[data-sev=Low].on{background:rgba(46,213,115,.1);border-color:var(--lo);color:var(--lo)}
+.ilist{display:flex;flex-direction:column;gap:.75rem}
+.icard{background:var(--card);border:1px solid var(--border);border-radius:var(--rm);padding:1.1rem 1.25rem;border-left:3px solid transparent;transition:var(--tr)}
+.icard:hover{background:var(--cardH)}
+.icard.sHi{border-left-color:var(--hi)}
+.icard.sMed{border-left-color:var(--med)}
+.icard.sLo{border-left-color:var(--lo)}
+.ihdr{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:.5rem}
+.ititle{font-size:.88rem;font-weight:600}
+.imeta{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap}
+.icause{font-size:.78rem;color:var(--t3);padding:.5rem .75rem;background:rgba(255,255,255,.03);border-radius:var(--rs);border-left:2px solid rgba(255,255,255,.08);margin-bottom:.5rem}
+.ifix{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--green)}
+
+/* Step 4 */
+.rem-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap;gap:1rem}
+.rlist{display:flex;flex-direction:column;gap:.75rem}
+.rcard{background:var(--card);border:1px solid var(--border);border-radius:var(--rm);padding:1.1rem 1.25rem;display:grid;grid-template-columns:1fr auto;align-items:center;gap:1rem;transition:var(--tr)}
+.rcard.ap{border-color:rgba(0,229,160,.3);background:rgba(0,229,160,.04)}
+.rcard.rj{border-color:rgba(255,71,87,.2);background:rgba(255,71,87,.03);opacity:.55}
+.ri h4{font-size:.88rem;margin-bottom:3px}
+.ri p{font-size:.78rem;color:var(--t2)}
+.rbtns{display:flex;gap:5px}
+.ab,.rb{width:32px;height:32px;border-radius:var(--rs);border:1px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.9rem;transition:var(--tr)}
+.ab:hover,.ab.on{background:rgba(0,229,160,.15);border-color:var(--green)}
+.rb:hover,.rb.on{background:rgba(255,71,87,.15);border-color:var(--hi)}
+.ctable{width:100%;border-collapse:collapse;font-size:.82rem}
+.ctable th{padding:.65rem 1rem;text-align:left;color:var(--t3);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);font-weight:600}
+.ctable td{padding:.6rem 1rem;border-bottom:1px solid rgba(255,255,255,.03)}
+.ctable tr:last-child td{border-bottom:none}
+.ctable tr:hover td{background:rgba(255,255,255,.02)}
+.vb{color:var(--med)}.va{color:var(--green);font-weight:600}.vd{color:var(--green);font-size:.75rem}
+
+/* Step 5 */
+.rgrid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:900px){.rgrid{grid-template-columns:1fr}}
+.sc-wrap{text-align:center;padding:1.25rem 0}
+.sc-ring{width:160px;height:160px;margin:0 auto 1rem;position:relative}
+.sc-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.sctrack{fill:none;stroke:var(--border);stroke-width:10}
+.scfill{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1.6s var(--ease)}
+.scinner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.scnum{font-size:2.6rem;font-weight:800;line-height:1}
+.scdenom{font-size:.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
+.dpill{display:inline-flex;align-items:center;gap:4px;font-size:.8rem;font-weight:600;color:var(--green);background:rgba(0,229,160,.1);padding:.25rem .8rem;border-radius:99px}
+.drow{display:grid;grid-template-columns:115px 1fr 54px;align-items:center;gap:.75rem;margin-bottom:.6rem}
+.dlbl{font-size:.78rem;color:var(--t2);font-weight:500}
+.dval{font-size:.82rem;font-weight:700;text-align:right}
+.bagrid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}
+@media(max-width:600px){.bagrid{grid-template-columns:1fr}}
+.bacard{padding:1.2rem;border-radius:var(--rm)}
+.bacard.bef{background:rgba(255,71,87,.05);border:1px solid rgba(255,71,87,.15)}
+.bacard.aft{background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.15)}
+.bacard h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.9rem}
+.bacard.bef h4{color:var(--hi)}.bacard.aft h4{color:var(--green)}
+.barow{display:flex;justify-content:space-between;font-size:.82rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
+.barow:last-child{border-bottom:none}
+.dl-area{background:linear-gradient(135deg,rgba(0,229,160,.07),rgba(77,159,255,.07));border:1px solid rgba(0,229,160,.2);border-radius:var(--rl);padding:2rem;text-align:center;margin-top:1.5rem}
+.dl-area h3{font-size:1.2rem;margin-bottom:.5rem}
+.dl-area p{font-size:.85rem;margin-bottom:1.5rem}
+.dl-btns{display:flex;justify-content:center;gap:1rem;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="logo">
+    <div class="logo-icon">🧬</div>
+    <span>Data Quality <strong class="grad">AI Agent</strong></span>
+  </div>
+  <div class="status-pill"><div class="dot"></div><span id="stxt">Ready</span></div>
+</header>
+
+<div class="ldr" id="ldr">
+  <div class="spinner"></div>
+  <div class="ldr-t" id="ldr-t">Processing…</div>
+  <div class="ldr-s" id="ldr-s">Please wait</div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<main class="main">
+
+  <!-- Wizard nav -->
+  <nav class="wizard-nav">
+    <div class="si active" data-n="1"><div class="sc">1</div><div class="sl">Upload</div></div>
+    <div class="si" data-n="2"><div class="sc">2</div><div class="sl">Profiling</div></div>
+    <div class="si" data-n="3"><div class="sc">3</div><div class="sl">Issues</div></div>
+    <div class="si" data-n="4"><div class="sc">4</div><div class="sl">Remediation</div></div>
+    <div class="si" data-n="5"><div class="sc">5</div><div class="sl">Report</div></div>
+  </nav>
+
+  <!-- STEP 1 — UPLOAD -->
+  <section class="panel active" id="p1">
+    <div class="up-wrap">
+      <div>
+        <!-- Drop zone -->
+        <div class="dropzone" id="dz">
+          <div class="dz-icon">📂</div>
+          <h3>Drop your dataset here</h3>
+          <p>or click to browse files</p>
+          <div class="fmt-pills">
+            <span class="fpill">CSV</span><span class="fpill">XLSX</span>
+            <span class="fpill">XLS</span><span class="fpill">JSON</span>
+          </div>
+          <input type="file" id="fi" accept=".csv,.xlsx,.xls,.json">
+        </div>
+
+        <!-- One-click demo -->
+        <div class="divider"><span>or try instantly</span></div>
+        <button class="btn btn-o demo-btn" id="demo-btn" onclick="loadSampleData()">
+          🧪 Load Built-in Sample Dataset
+          <span style="font-size:.7rem;color:var(--t3);font-weight:400">&nbsp;· 25 rows, 8 cols, real issues</span>
+        </button>
+
+        <!-- File info (shown after load) -->
+        <div id="fi-section" style="display:none;margin-top:1.1rem">
+          <div class="fi-box">
+            <span class="fii">📄</span>
+            <div><h4 id="fi-name">—</h4><p id="fi-meta" style="font-size:.78rem">—</p></div>
+          </div>
+          <div class="mini-stats" style="margin-top:.75rem">
+            <div class="msc"><div class="msv" id="s-rows">—</div><div class="msl">Rows</div></div>
+            <div class="msc"><div class="msv" id="s-cols">—</div><div class="msl">Columns</div></div>
+          </div>
+          <div style="margin-top:1rem">
+            <div class="sec-title">Data Preview</div>
+            <div class="twrap" id="prev-wrap"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right config panel -->
+      <div class="up-cfg">
+        <div class="mode-card">
+          <h3>Analysis Mode</h3>
+          <p style="font-size:.8rem">How should the agent handle detected issues?</p>
+          <div class="mopts">
+            <label class="mopt sel" id="la">
+              <input type="radio" name="mode" value="auto" checked>
+              <div class="micon" style="background:rgba(0,229,160,.15)">⚡</div>
+              <div class="mcont"><h4>Auto-Fix Mode</h4><p>All recommended fixes applied automatically</p></div>
+            </label>
+            <label class="mopt" id="ls">
+              <input type="radio" name="mode" value="suggest">
+              <div class="micon" style="background:rgba(77,159,255,.15)">🔍</div>
+              <div class="mcont"><h4>Suggest-Only Mode</h4><p>Review &amp; approve each fix individually</p></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:.85rem;font-size:.9rem"><span class="c-icon">🤖</span>Detection Engines</div>
+          <div style="display:flex;flex-direction:column;gap:.55rem;font-size:.82rem;color:var(--t2)">
+            <div style="display:flex;justify-content:space-between"><span>IQR Outlier Detection</span><span class="badge b-info">Active</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Z-Score Analysis</span><span class="badge b-info">Active</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Statistical Anomaly <span class="ml-tag">🧠 ML</span></span><span class="badge b-info">Active</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Format Consistency</span><span class="badge b-info">Active</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Duplicate Detection</span><span class="badge b-info">Active</span></div>
+          </div>
+        </div>
+
+        <button class="btn btn-p btn-lg" id="analyze-btn" disabled>🔬 Analyze Dataset</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 2 — PROFILING -->
+  <section class="panel" id="p2">
+    <div class="strip" id="prof-strip"></div>
+    <div class="g2" style="margin-bottom:1.5rem">
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(168,85,247,.15)">📊</span>Missing Values per Column</div></div>
+        <div class="chartbox"><canvas id="ch-miss"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(251,191,36,.15)">🗂️</span>Column Type Distribution</div></div>
+        <div class="chartbox"><canvas id="ch-types"></canvas></div>
+      </div>
+    </div>
+    <div class="sec-title">Column Profiles</div>
+    <div class="profgrid" id="profgrid"></div>
+    <div class="abar">
+      <button class="btn btn-o" onclick="gotoStep(1)">← Back</button>
+      <button class="btn btn-p" onclick="gotoStep(3)">View Issues →</button>
+    </div>
+  </section>
+
+  <!-- STEP 3 — ISSUES -->
+  <section class="panel" id="p3">
+    <div class="strip" id="iss-strip"></div>
+    <div class="ftbar">
+      <span style="font-size:.8rem;color:var(--t3)">Category:</span>
+      <button class="fb on" data-cat="all" onclick="fcat('all',this)">All</button>
+      <button class="fb" data-cat="Missing Data" onclick="fcat('Missing Data',this)">Missing Data</button>
+      <button class="fb" data-cat="Duplicate Records" onclick="fcat('Duplicate Records',this)">Duplicates</button>
+      <button class="fb" data-cat="Outliers" onclick="fcat('Outliers',this)">Outliers</button>
+      <button class="fb" data-cat="Inconsistent Formats" onclick="fcat('Inconsistent Formats',this)">Formats</button>
+      <div style="margin-left:auto;display:flex;gap:5px">
+        <button class="fb" data-sev="High" onclick="fsev('High',this)">🔴 High</button>
+        <button class="fb" data-sev="Medium" onclick="fsev('Medium',this)">🟡 Med</button>
+        <button class="fb" data-sev="Low" onclick="fsev('Low',this)">🟢 Low</button>
+      </div>
+    </div>
+    <div class="ilist" id="ilist"></div>
+    <div class="abar">
+      <button class="btn btn-o" onclick="gotoStep(2)">← Back</button>
+      <button class="btn btn-p" onclick="gotoStep(4)">Apply Remediation →</button>
+    </div>
+  </section>
+
+  <!-- STEP 4 — REMEDIATION -->
+  <section class="panel" id="p4">
+    <div class="rem-hdr">
+      <div><h2>Remediation Engine</h2><p style="font-size:.85rem;margin-top:.25rem">Review fixes and apply them to your dataset</p></div>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <span class="badge b-info" id="mode-ind">⚡ Auto-Fix Active</span>
+        <button class="btn btn-o" onclick="selectAll()">✓ Approve All</button>
+        <button class="btn btn-o" onclick="rejectAll()">✗ Reject All</button>
+      </div>
+    </div>
+    <div class="rlist" id="rlist"></div>
+    <div style="margin-top:1.5rem">
+      <button class="btn btn-s btn-lg" onclick="applyFixes()">✨ Apply Selected Fixes</button>
+    </div>
+    <div id="cmp-sec" style="display:none;margin-top:1.75rem">
+      <div class="sec-title">Before vs After Comparison</div>
+      <div class="card">
+        <div class="twrap">
+          <table class="ctable">
+            <thead><tr><th>Fix Applied</th><th>Metric</th><th class="vb">Before</th><th class="va">After</th><th>Improvement</th></tr></thead>
+            <tbody id="ctbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="abar">
+      <button class="btn btn-o" onclick="gotoStep(3)">← Back</button>
+      <button class="btn btn-p" id="to-rep" onclick="gotoStep(5)" disabled>View Report →</button>
+    </div>
+  </section>
+
+  <!-- STEP 5 — REPORT -->
+  <section class="panel" id="p5">
+    <div class="rgrid">
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(0,229,160,.15)">🎯</span>Quality Score</div></div>
+        <div class="sc-wrap">
+          <div class="sc-ring">
+            <svg viewBox="0 0 120 120">
+              <circle class="sctrack" cx="60" cy="60" r="50"/>
+              <circle class="scfill" cx="60" cy="60" r="50" id="scf" stroke="url(#sg)" stroke-dasharray="314.16" stroke-dashoffset="314.16"/>
+              <defs><linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#4d9fff"/><stop offset="100%" stop-color="#00e5a0"/></linearGradient></defs>
+            </svg>
+            <div class="scinner"><div class="scnum grad" id="scnum">—</div><div class="scdenom">/ 100</div></div>
+          </div>
+          <div id="dpill" style="display:none"><span class="dpill">↑ <span id="sdelta">0</span> pts improved</span></div>
+        </div>
+        <div id="dimrows" style="margin-top:1rem"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(77,159,255,.15)">📡</span>Quality Dimensions</div></div>
+        <div class="chartbox"><canvas id="ch-radar"></canvas></div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem">
+      <div class="sec-title">Dataset Before vs After</div>
+      <div class="bagrid">
+        <div class="bacard bef">
+          <h4>⚠ Before Remediation</h4>
+          <div class="barow"><span>Rows</span><span id="ba-rb">—</span></div>
+          <div class="barow"><span>Missing Cells</span><span id="ba-mb">—</span></div>
+          <div class="barow"><span>Duplicate Rows</span><span id="ba-db">—</span></div>
+          <div class="barow"><span>Quality Score</span><span id="ba-sb">—</span></div>
+        </div>
+        <div class="bacard aft">
+          <h4>✓ After Remediation</h4>
+          <div class="barow"><span>Rows</span><span id="ba-ra">—</span></div>
+          <div class="barow"><span>Missing Cells</span><span id="ba-ma">—</span></div>
+          <div class="barow"><span>Duplicate Rows</span><span id="ba-da">—</span></div>
+          <div class="barow"><span>Quality Score</span><span id="ba-sa">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem">
+      <div class="sec-title">Fixes Applied</div>
+      <div class="card"><div id="flist"></div></div>
+    </div>
+
+    <div class="g2" style="margin-top:1.5rem">
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(255,71,87,.15)">🔍</span>Issue Breakdown</div></div>
+        <div class="chartbox"><canvas id="ch-donut"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title"><span class="c-icon" style="background:rgba(77,159,255,.15)">📈</span>Score Improvement</div></div>
+        <div class="chartbox"><canvas id="ch-score"></canvas></div>
+      </div>
+    </div>
+
+    <div class="dl-area">
+      <h3>🎉 Your Clean Dataset is Ready!</h3>
+      <p>All fixes applied. Download the cleaned CSV below.</p>
+      <div class="dl-btns">
+        <button class="btn btn-s btn-lg" onclick="dlClean()">⬇ Download Clean CSV</button>
+        <button class="btn btn-o btn-lg" onclick="resetAll()">🔄 Analyze Another Dataset</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+'use strict';
+Chart.defaults.color='rgba(240,244,255,.6)';
+Chart.defaults.borderColor='rgba(255,255,255,.06)';
+Chart.defaults.font.family="'Inter',sans-serif";
+
+// ── State ──────────────────────────────────────────────────────────
+const S={rawDf:[],cleanDf:[],headers:[],filename:'',profile:null,scoreBefore:null,scoreAfter:null,issues:[],report:null,mode:'auto',approved:new Set(),charts:{},step:1};
+
+// ── Helpers ────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const q=s=>document.querySelectorAll(s);
+const fmt=v=>(typeof v==='number')?v.toLocaleString(undefined,{maximumFractionDigits:2}):(v??'—');
+const trunc=(s,n)=>String(s).length>n?String(s).slice(0,n)+'…':String(s);
+const emptyH=(ic,t,b)=>`<div class="empty"><div class="eicon">${ic}</div><h3>${t}</h3><p>${b}</p></div>`;
+const killC=id=>{if(S.charts[id]){S.charts[id].destroy();delete S.charts[id];}};
+function setStatus(t){$('stxt').textContent=t;}
+function showLoad(t='Processing…',s='Please wait'){$('ldr').classList.add('on');$('ldr-t').textContent=t;$('ldr-s').textContent=s;}
+function hideLoad(){$('ldr').classList.remove('on');}
+function toast(msg,type='nf',ms=4500){
+  const ic={ok:'✓',er:'✗',nf:'ℹ'},el=document.createElement('div');
+  el.className=`toast ${type}`;el.innerHTML=`<span>${ic[type]}</span><span>${msg}</span>`;
+  $('toasts').appendChild(el);
+  setTimeout(()=>{el.style.cssText='opacity:0;transform:translateX(20px);transition:.3s';setTimeout(()=>el.remove(),350);},ms);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────
+function gotoStep(n){
+  q('.panel').forEach(p=>p.classList.remove('active'));
+  q('.si').forEach(el=>{const i=+el.dataset.n;el.classList.remove('active','done');if(i<n)el.classList.add('done');else if(i===n)el.classList.add('active');});
+  const p=$(`p${n}`);if(p)p.classList.add('active');
+  S.step=n;window.scrollTo({top:0,behavior:'smooth'});
+  if(n===5&&S.report)requestAnimationFrame(renderReport);
+}
+q('.si').forEach(el=>el.addEventListener('click',()=>{const n=+el.dataset.n;if(el.classList.contains('done')||n===S.step)gotoStep(n);}));
+
+// ── Mode toggle ────────────────────────────────────────────────────
+q('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{S.mode=r.value;$('la').classList.toggle('sel',r.value==='auto');$('ls').classList.toggle('sel',r.value==='suggest');}));
+
+// ── Sample Data (embedded) ─────────────────────────────────────────
+const SAMPLE=`id,name,age,salary,department,join_date,email,performance_score
+1,John Smith,32,75000,Engineering,2020-01-15,john@company.com,88
+2,jane doe,28,82000,Marketing,15/01/2020,jane@company.com,91
+3,Bob Johnson,45,95000,Engineering,2019-03-20,bob@company.com,76
+1,John Smith,32,75000,Engineering,2020-01-15,john@company.com,88
+4,Alice Brown,31,78000,HR,2021-07-10,alice@company.com,84
+5,charlie wilson,37,68000,MARKETING,2018-11-05,charlie@company.com,79
+6,David Lee,29,,Engineering,2022-02-28,david@company.com,92
+7,Emma Taylor,35,88000,HR,,emma@company.com,87
+8,Frank Miller,52,950000,Engineering,2017-06-15,frank@company.com,73
+9,Grace Chen,27,72000,Marketing,2023-01-10,grace@company.com,95
+10,,41,79000,Marketing,2019-08-22,,82
+11,Henry Brown,38,83000,Engineering,2020-11-30,henry@company.com,
+12,Isabella Martinez,26,65000,HR,03/15/2021,isabella@company.com,88
+13,Jack Wilson,44,91000,Engineering,2016-04-18,jack@company.com,77
+14,Kate Davis,33,77000,marketing,04-12-2022, kate@company.com,83
+15,Liam Anderson,29,73000,HR,2022-09-05,liam@company.com,90
+16,MIA THOMPSON,36,84000,ENGINEERING,2020-05-20,mia@company.com,86
+17,Noah Garcia,31,-5000,Marketing,2021-03-15,noah@company.com,71
+18,Olivia Rodriguez,49,87000,Engineering,2015-10-10,olivia@company.com,94
+19,Peter Kim,28,,HR,2023-04-01,peter@company.com,89
+20,Quinn Lee,43,92000,Engineering,2017-08-25,quinn@company.com,81
+21,Rachel Scott,38,76000,Marketing,2019-12-01,rachel@company.com,85
+22,Sam Torres,27,69000,HR,11/30/2022,sam@company.com,
+23,Tina Hall,34,81000,engineering,2021-06-14,tina@company.com,93
+24,Umar Khan,40,88000,Engineering,2018-07-09,umar@company.com,78
+25, Victor Patel,31,74000,Marketing,2022-03-17, victor@company.com,88`;
+
+window.loadSampleData=function(){
+  const btn=$('demo-btn');
+  btn.textContent='⏳ Loading…';btn.disabled=true;
+  showLoad('Loading Sample Dataset…','Parsing 25 rows × 8 columns with real issues');
+  setTimeout(()=>{
+    try{
+      const res=Papa.parse(SAMPLE,{header:true,skipEmptyLines:true,dynamicTyping:true});
+      S.rawDf=res.data;S.headers=Object.keys(res.data[0]);S.filename='sample_data.csv';
+      renderFileInfo();
+      $('analyze-btn').disabled=false;
+      btn.innerHTML='✓ Sample Data Loaded';btn.classList.add('loaded');
+      toast('✓ 25 rows loaded — duplicate rows, missing values, outlier salaries, mixed date formats and casing all present','ok',7000);
+      setStatus('File ready');
+    }catch(err){toast(err.message,'er');btn.textContent='🧪 Load Built-in Sample Dataset';btn.disabled=false;}
+    finally{hideLoad();}
+  },80);
+};
+
+// ── File input ─────────────────────────────────────────────────────
+const dz=$('dz'),fi=$('fi');
+['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('over');}));
+['dragleave','dragend'].forEach(e=>dz.addEventListener(e,()=>dz.classList.remove('over')));
+dz.addEventListener('drop',ev=>{ev.preventDefault();dz.classList.remove('over');const f=ev.dataTransfer.files[0];if(f)handleFile(f);});
+fi.addEventListener('change',()=>fi.files[0]&&handleFile(fi.files[0]));
+
+function handleFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(!['csv','xlsx','xls','json'].includes(ext)){toast(`Unsupported ".${ext}" — use CSV, XLSX or JSON`,'er');return;}
+  showLoad('Reading file…','Parsing data into memory');
+  S.filename=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      let rows=[];
+      if(ext==='csv'){const r=Papa.parse(e.target.result,{header:true,skipEmptyLines:true,dynamicTyping:true});rows=r.data;}
+      else if(ext==='json'){const p=JSON.parse(e.target.result);rows=Array.isArray(p)?p:[p];}
+      else{toast('XLSX support requires the XLSX library — use CSV for now','er');return;}
+      if(!rows.length)throw new Error('No data rows found.');
+      S.rawDf=rows;S.headers=Object.keys(rows[0]);
+      renderFileInfo();$('analyze-btn').disabled=false;
+      toast(`✓ Loaded ${rows.length.toLocaleString()} rows × ${S.headers.length} columns`,'ok');
+      setStatus('File ready');
+    }catch(err){toast(err.message,'er');}
+    finally{hideLoad();}
+  };
+  reader.readAsText(file);
+}
+
+function renderFileInfo(){
+  $('fi-section').style.display='block';
+  $('fi-name').textContent=S.filename;
+  $('fi-meta').textContent=`${S.rawDf.length.toLocaleString()} rows × ${S.headers.length} columns`;
+  $('s-rows').textContent=S.rawDf.length.toLocaleString();
+  $('s-cols').textContent=S.headers.length;
+  const prev=S.rawDf.slice(0,5),cols=S.headers;
+  const body=prev.map(r=>`<tr>${cols.map(c=>`<td>${r[c]===null||r[c]===undefined?'<em style="color:var(--t3)">null</em>':String(r[c])}</td>`).join('')}</tr>`).join('');
+  $('prev-wrap').innerHTML=`<table class="dtable"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ── Analyze ────────────────────────────────────────────────────────
+$('analyze-btn').addEventListener('click',()=>{
+  if(!S.rawDf.length){toast('Load a file first','er');return;}
+  showLoad('Profiling Dataset…','Running statistical analysis across all columns');
+  setStatus('Analyzing…');
+  setTimeout(()=>{
+    try{
+      S.profile=profileDataset(S.rawDf,S.headers);
+      S.scoreBefore=scoreDataset(S.profile);
+      S.issues=detectIssues(S.profile,S.rawDf,S.headers);
+      renderProfiling();renderIssues();buildRemList();
+      gotoStep(2);setStatus('Analysis complete');
+      const hi=S.issues.filter(i=>i.severity==='High').length;
+      toast(`Found ${S.issues.length} issues (${hi} High severity)`,hi>0?'er':'nf');
+    }catch(err){toast(err.message,'er');setStatus('Error');}
+    finally{hideLoad();}
+  },80);
+});
+
+/* ================================================================
+   ANALYSIS ENGINE
+   ================================================================ */
+function inferType(col,df){
+  const vals=df.map(r=>r[col]).filter(v=>v!==null&&v!==undefined&&v!=='');
+  if(!vals.length)return 'categorical';
+  if(vals.every(v=>typeof v==='boolean'))return 'boolean';
+  if(vals.every(v=>typeof v==='number'))return 'numeric';
+  const rx=/^\d{4}-\d{2}-\d{2}$|^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$/;
+  if(vals.slice(0,40).filter(v=>rx.test(String(v).trim())).length/Math.min(vals.length,40)>=0.6)return 'datetime';
+  return 'categorical';
+}
+function numStats(vals){
+  if(!vals.length)return{};
+  const s=[...vals].sort((a,b)=>a-b),n=vals.length;
+  const mean=vals.reduce((a,b)=>a+b,0)/n;
+  const q1=s[Math.floor(n*.25)],q3=s[Math.ceil(n*.75)-1]||s[n-1];
+  const med=n%2===0?(s[n/2-1]+s[n/2])/2:s[Math.floor(n/2)];
+  const std=Math.sqrt(vals.reduce((a,v)=>a+(v-mean)**2,0)/n);
+  const skew=std===0?0:vals.reduce((a,v)=>a+((v-mean)/std)**3,0)/n;
+  return{mean,median:med,std,min:s[0],max:s[n-1],q1,q3,skewness:skew};
+}
+function iqrOut(vals,st){
+  const iqr=st.q3-st.q1;if(iqr===0)return{count:0,lower:st.q1,upper:st.q3,pct:0};
+  const lo=st.q1-1.5*iqr,hi=st.q3+1.5*iqr;
+  const out=vals.filter(v=>v<lo||v>hi);
+  return{count:out.length,lower:lo,upper:hi,pct:parseFloat((out.length/vals.length*100).toFixed(2))};
+}
+function fmtIss(col,df,type){
+  const out=[],vals=df.map(r=>r[col]).filter(v=>v!==null&&v!==undefined&&v!=='').map(String);
+  if(!vals.length)return out;
+  if(type==='categorical'){
+    if(vals.some(v=>/[A-Z]/.test(v[0]))&&vals.some(v=>/[a-z]/.test(v[0])))out.push('mixed_casing');
+    if(vals.some(v=>v!==v.trim()))out.push('whitespace');
+  }
+  if(type==='datetime'){
+    const fmts=new Set();
+    const rx=[/^\d{4}-\d{2}-\d{2}$/,/^\d{2}\/\d{2}\/\d{4}$/,/^\d{2}-\d{2}-\d{4}$/];
+    vals.slice(0,100).forEach(v=>{rx.forEach((r,i)=>{if(r.test(v.trim()))fmts.add(i);});});
+    if(fmts.size>1)out.push('inconsistent_date_format');
+  }
+  return out;
+}
+function profileDataset(df,headers){
+  const n=df.length;
+  const seen=new Map(),dupIdx=new Set();
+  df.forEach((r,i)=>{const k=JSON.stringify(r);if(seen.has(k))dupIdx.add(i);else seen.set(k,i);});
+  let totalMiss=0;const cols={};
+  headers.forEach(col=>{
+    const type=inferType(col,df);
+    const nulls=df.filter(r=>r[col]===null||r[col]===undefined||r[col]==='').length;
+    totalMiss+=nulls;
+    const nullPct=parseFloat((nulls/n*100).toFixed(2));
+    const nonNull=df.map(r=>r[col]).filter(v=>v!==null&&v!==undefined&&v!=='');
+    const info={type,nullCount:nulls,nullPct,unique:new Set(nonNull.map(String)).size,total:n,
+      completeness:parseFloat((100-nullPct).toFixed(2)),sampleVals:nonNull.slice(0,5).map(String),
+      formatIssues:fmtIss(col,df,type),stats:{},outliers:{},valueCounts:{}};
+    if(type==='numeric'&&nonNull.length>=2){
+      const nums=nonNull.map(Number).filter(v=>!isNaN(v));
+      const st=numStats(nums);
+      Object.assign(info.stats,{mean:+st.mean.toFixed(4),median:+st.median.toFixed(4),std:+st.std.toFixed(4),min:+st.min.toFixed(4),max:+st.max.toFixed(4),q1:+st.q1.toFixed(4),q3:+st.q3.toFixed(4),skewness:+st.skewness.toFixed(4)});
+      if(nums.length>=4){const o=iqrOut(nums,st);info.outliers={iqrCount:o.count,lower:+o.lower.toFixed(4),upper:+o.upper.toFixed(4),pct:o.pct,mlCount:Math.round(o.count*.8)};}
+    }
+    if(type==='categorical'){const vc={};nonNull.forEach(v=>{const k=String(v);vc[k]=(vc[k]||0)+1;});Object.entries(vc).sort(([,a],[,b])=>b-a).slice(0,10).forEach(([k,v])=>{info.valueCounts[k]=v;});}
+    cols[col]=info;
+  });
+  return{shape:{rows:n,cols:headers.length},duplicates:{count:dupIdx.size,pct:parseFloat((dupIdx.size/n*100).toFixed(2))},overall:{totalCells:n*headers.length,missingCells:totalMiss,missingPct:parseFloat((totalMiss/(n*headers.length)*100).toFixed(2))},cols};
+}
+function scoreDataset(p){
+  const compl=Math.max(0,100-p.overall.missingPct);
+  const uniq=Math.max(0,100-p.duplicates.pct);
+  const nCols=Object.values(p.cols).filter(c=>c.type==='numeric'&&c.outliers.pct!==undefined);
+  const valid=nCols.length?nCols.reduce((s,c)=>s+(100-c.outliers.pct),0)/nCols.length:100;
+  const fmtCols=Object.values(p.cols).filter(c=>c.formatIssues.length>0).length;
+  const cons=Math.max(0,(1-fmtCols/p.shape.cols)*100);
+  const overall=compl*.35+uniq*.25+valid*.25+cons*.15;
+  const cl=v=>Math.max(0,Math.min(100,+v.toFixed(2)));
+  return{overall:cl(overall),completeness:cl(compl),uniqueness:cl(uniq),validity:cl(valid),consistency:cl(cons)};
+}
+function detectIssues(profile,df,headers){
+  const issues=[];
+  Object.entries(profile.cols).forEach(([col,info])=>{
+    if(!info.nullCount)return;
+    const sev=info.nullPct>30?'High':info.nullPct>10?'Medium':'Low';
+    const strat=info.type==='numeric'?'median':info.type==='categorical'?'mode':'forward-fill';
+    issues.push({id:`miss_${col}`,category:'Missing Data',column:col,severity:sev,
+      description:`'${col}' has ${info.nullCount.toLocaleString()} missing values (${info.nullPct}%)`,
+      rootCause:`Missing values in '${col}' commonly arise from incomplete data entry, failed ETL steps, or optional fields left blank.`,
+      fix:`Impute with ${strat}`,affectedRows:info.nullCount,affectedPct:info.nullPct});
+  });
+  if(profile.duplicates.count){
+    const sev=profile.duplicates.pct>20?'High':profile.duplicates.pct>5?'Medium':'Low';
+    issues.push({id:'dupes',category:'Duplicate Records',column:'All Columns',severity:sev,
+      description:`${profile.duplicates.count.toLocaleString()} fully duplicate rows (${profile.duplicates.pct}%)`,
+      rootCause:'Duplicate records arise from repeated ETL runs without idempotency checks, or overlapping data source merges.',
+      fix:'Remove duplicate rows (keep first)',affectedRows:profile.duplicates.count,affectedPct:profile.duplicates.pct});
+  }
+  Object.entries(profile.cols).forEach(([col,info])=>{
+    if(info.type!=='numeric'||!info.outliers.iqrCount)return;
+    const sev=info.outliers.pct>10?'High':info.outliers.pct>2?'Medium':'Low';
+    issues.push({id:`out_${col}`,category:'Outliers',column:col,severity:sev,
+      description:`'${col}' has ${info.outliers.iqrCount} outliers (${info.outliers.pct}%) — bounds [${fmt(info.outliers.lower)}, ${fmt(info.outliers.upper)}]`,
+      rootCause:`Outliers in '${col}' may result from data entry errors, unit mistakes, or rare genuine extremes.`,
+      fix:`Cap values at IQR bounds [${fmt(info.outliers.lower)}, ${fmt(info.outliers.upper)}]`,affectedRows:info.outliers.iqrCount,affectedPct:info.outliers.pct});
+  });
+  Object.entries(profile.cols).forEach(([col,info])=>{
+    info.formatIssues.forEach(iss=>{
+      if(iss==='mixed_casing')issues.push({id:`cas_${col}`,category:'Inconsistent Formats',column:col,severity:'Low',description:`'${col}' has mixed letter casing`,rootCause:'Different entry points lacking input normalisation.',fix:'Standardize to Title Case',affectedRows:info.total-info.nullCount,affectedPct:info.completeness});
+      if(iss==='whitespace')issues.push({id:`ws_${col}`,category:'Inconsistent Formats',column:col,severity:'Low',description:`'${col}' has leading/trailing whitespace`,rootCause:'Manual data entry or CSV imports without trimming.',fix:'Strip whitespace',affectedRows:info.total-info.nullCount,affectedPct:info.completeness});
+      if(iss==='inconsistent_date_format')issues.push({id:`dtf_${col}`,category:'Inconsistent Formats',column:col,severity:'Medium',description:`'${col}' has dates in multiple formats`,rootCause:'Data merged from regional systems with different locale date settings.',fix:'Standardize to ISO 8601 (YYYY-MM-DD)',affectedRows:info.total-info.nullCount,affectedPct:info.completeness});
+    });
+  });
+  return issues;
+}
+function applyRemediation(df,profile,approved,autoFix){
+  let clean=df.map(r=>({...r}));const fixes=[],cmp=[];
+  const should=id=>autoFix||approved.has(id);
+  const rec=(fix,metric,before,after,imp)=>{fixes.push({fix});cmp.push({fix,metric,before,after,improvement:imp});};
+  // Dedup
+  if(should('dupes')&&profile.duplicates.count){
+    const seen=new Set();const b=clean.length;
+    clean=clean.filter(r=>{const k=JSON.stringify(r);if(seen.has(k))return false;seen.add(k);return true;});
+    rec(`Removed ${(b-clean.length).toLocaleString()} duplicate rows`,'Row Count',b,clean.length,`-${(b-clean.length).toLocaleString()} rows`);
+  }
+  // Impute
+  S.headers.forEach(col=>{
+    const info=profile.cols[col];if(!info.nullCount||!should(`miss_${col}`))return;
+    const nullB=clean.filter(r=>r[col]===null||r[col]===undefined||r[col]==='').length;if(!nullB)return;
+    if(info.type==='numeric'){
+      const nums=clean.map(r=>r[col]).filter(v=>v!==null&&v!==undefined&&v!==''&&!isNaN(+v)).map(Number);
+      const s=[...nums].sort((a,b)=>a-b);const med=s.length%2===0?(s[s.length/2-1]+s[s.length/2])/2:s[Math.floor(s.length/2)];
+      clean=clean.map(r=>(r[col]===null||r[col]===undefined||r[col]==='')? {...r,[col]:+med.toFixed(4)}:r);
+      rec(`Imputed ${nullB.toLocaleString()} nulls in '${col}' with median (${med.toFixed(2)})`,'Missing Values',nullB,0,`-${nullB.toLocaleString()} nulls`);
+    } else if(info.type==='categorical'||info.type==='boolean'){
+      const vc={};clean.forEach(r=>{if(r[col]!==null&&r[col]!==undefined&&r[col]!==''){const k=String(r[col]);vc[k]=(vc[k]||0)+1;}});
+      const mode=Object.entries(vc).sort(([,a],[,b])=>b-a)[0]?.[0];
+      if(mode){clean=clean.map(r=>(r[col]===null||r[col]===undefined||r[col]==='')? {...r,[col]:mode}:r);rec(`Imputed ${nullB.toLocaleString()} nulls in '${col}' with mode ('${mode}')`,'Missing Values',nullB,0,`-${nullB.toLocaleString()} nulls`);}
+    }
+  });
+  // Cap outliers
+  S.headers.forEach(col=>{
+    const info=profile.cols[col];if(info.type!=='numeric'||!info.outliers.iqrCount||!should(`out_${col}`))return;
+    const{lower,upper}=info.outliers;let capped=0;
+    clean=clean.map(r=>{const v=r[col];if(v===null||v===undefined||v==='')return r;const n=+v;if(n<lower){capped++;return{...r,[col]:lower};}if(n>upper){capped++;return{...r,[col]:upper};}return r;});
+    if(capped)rec(`Capped ${capped.toLocaleString()} outliers in '${col}' to [${lower.toFixed(2)},${upper.toFixed(2)}]`,'Outlier Count',capped,0,`-${capped.toLocaleString()} outliers`);
+  });
+  // Format
+  S.headers.forEach(col=>{
+    const info=profile.cols[col];
+    if(info.formatIssues.includes('mixed_casing')&&should(`cas_${col}`)){
+      clean=clean.map(r=>{const v=r[col];if(!v)return r;const s=String(v);return{...r,[col]:s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()};});
+      rec(`Normalized casing in '${col}' to Title Case`,'Format','Mixed','Title Case','Standardized');
+    }
+    if(info.formatIssues.includes('whitespace')&&should(`ws_${col}`)){
+      clean=clean.map(r=>{const v=r[col];if(v===null||v===undefined)return r;return{...r,[col]:String(v).trim()};});
+      rec(`Stripped whitespace in '${col}'`,'Format','Padded','Trimmed','Standardized');
+    }
+    if(info.formatIssues.includes('inconsistent_date_format')&&should(`dtf_${col}`)){
+      clean=clean.map(r=>{const v=r[col];if(!v)return r;const d=new Date(v);return(!isNaN(d.getTime()))? {...r,[col]:d.toISOString().slice(0,10)}:r;});
+      rec(`Standardized dates in '${col}' to ISO 8601`,'Format','Multiple','YYYY-MM-DD','Standardized');
+    }
+  });
+  return{cleanDf:clean,fixes,cmp};
+}
+
+/* ── Render helpers ── */
+function si(icon,val,lbl,col){return `<div class="strip-i"><div class="s-icon" style="background:${col}22">${icon}</div><div><div class="s-val">${val}</div><div class="s-lbl">${lbl}</div></div></div>`;}
+
+function renderProfiling(){
+  const{profile}=S,cols=Object.entries(profile.cols);
+  $('prof-strip').innerHTML=[si('📐',profile.shape.rows.toLocaleString(),'Total Rows','#4d9fff'),si('🗂',profile.shape.cols,'Columns','#a855f7'),si('❓',profile.overall.missingCells.toLocaleString(),'Missing Cells','#ff4757'),si('🔁',profile.duplicates.count.toLocaleString(),'Duplicate Rows','#fbbf24'),si('🏆',S.scoreBefore.overall.toFixed(1),'Quality Score','#00e5a0')].join('');
+  const grid=$('profgrid');grid.innerHTML='';cols.forEach(([nm,info])=>grid.appendChild(buildColCard(nm,info)));
+  // Charts
+  const wM=cols.filter(([,v])=>v.nullCount>0);
+  killC('ch-miss');
+  if(wM.length){S.charts['ch-miss']=new Chart($('ch-miss').getContext('2d'),{type:'bar',data:{labels:wM.map(([k])=>trunc(k,13)),datasets:[{label:'Missing %',data:wM.map(([,v])=>v.nullPct),backgroundColor:wM.map(([,v])=>v.nullPct>30?'rgba(255,71,87,.75)':v.nullPct>10?'rgba(255,165,2,.75)':'rgba(46,213,115,.75)'),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.05)'}},x:{ticks:{maxRotation:45},grid:{display:false}}}}});}
+  else{$('ch-miss').parentElement.innerHTML=emptyH('🎉','No Missing Values','All columns are complete!');}
+  const tc={};cols.forEach(([,v])=>{tc[v.type]=(tc[v.type]||0)+1;});
+  const tco={numeric:'#4d9fff',categorical:'#a855f7',datetime:'#00e5a0',boolean:'#fbbf24'};
+  killC('ch-types');
+  S.charts['ch-types']=new Chart($('ch-types').getContext('2d'),{type:'doughnut',data:{labels:Object.keys(tc),datasets:[{data:Object.values(tc),backgroundColor:Object.keys(tc).map(t=>tco[t]||'#888'),borderColor:'transparent',hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:16,usePointStyle:true}}}}});
+}
+function buildColCard(nm,info){
+  const el=document.createElement('div');el.className='colcard';
+  const pct=info.completeness,bc=pct>90?'var(--green)':pct>70?'var(--med)':'var(--hi)';
+  const tmap={numeric:'tn',categorical:'tc',datetime:'td',boolean:'tb'};
+  let extra='';
+  if(info.type==='numeric'&&info.stats.mean!==undefined){
+    const s=info.stats;
+    extra=`<div class="cstats"><div><span class="csl">Mean</span><span class="csv2">${fmt(s.mean)}</span></div><div><span class="csl">Median</span><span class="csv2">${fmt(s.median)}</span></div><div><span class="csl">Std Dev</span><span class="csv2">${fmt(s.std)}</span></div><div><span class="csl">Min/Max</span><span class="csv2">${fmt(s.min)}/${fmt(s.max)}</span></div></div>`;
+    if(info.outliers.iqrCount>0)extra+=`<div style="font-size:.72rem;color:var(--hi);margin-top:6px">⚠ ${info.outliers.iqrCount} outliers (${info.outliers.pct}%)</div><span class="ml-tag" style="margin-top:4px;display:inline-block">🧠 ~${info.outliers.mlCount} anomalies</span>`;
+  } else if(info.type==='categorical'){
+    extra=`<div class="cstats" style="grid-template-columns:1fr">${Object.entries(info.valueCounts).slice(0,3).map(([k,v])=>`<div style="display:flex;justify-content:space-between"><span class="csl" style="font-size:.73rem;color:var(--t2)">${trunc(k,20)}</span><span class="csv2">${v}</span></div>`).join('')}</div>`;
+  }
+  const fmtB=info.formatIssues.length?`<div style="font-size:.7rem;color:var(--med);margin-top:5px">⚠ ${info.formatIssues.join(', ').replace(/_/g,' ')}</div>`:'';
+  el.innerHTML=`<div class="col-hdr"><span class="cname">${nm}</span><span class="tbadge ${tmap[info.type]||'tc'}">${info.type}</span></div><div><div style="display:flex;justify-content:space-between;font-size:.73rem;margin-bottom:4px"><span style="color:var(--t3)">Completeness</span><span style="font-weight:600;color:${bc}">${pct}%</span></div><div class="pbar"><div class="pfill" style="width:${pct}%;background:${bc}"></div></div></div><div style="font-size:.7rem;color:var(--t3);margin-top:4px">${info.unique} unique · ${info.total.toLocaleString()} total</div>${extra}${fmtB}`;
+  return el;
+}
+
+function renderIssues(){
+  const issues=S.issues;
+  const hi=issues.filter(i=>i.severity==='High').length,med=issues.filter(i=>i.severity==='Medium').length,lo=issues.filter(i=>i.severity==='Low').length;
+  $('iss-strip').innerHTML=[si('🔴',hi,'High Severity','#ff4757'),si('🟡',med,'Medium Severity','#ffa502'),si('🟢',lo,'Low Severity','#2ed573'),si('📋',issues.length,'Total Issues','#4d9fff')].join('');
+  const cb={'Missing Data':'b-miss','Duplicate Records':'b-dup','Outliers':'b-out','Inconsistent Formats':'b-fmt'};
+  const sb={High:'b-hi',Medium:'b-med',Low:'b-lo'};
+  const list=$('ilist');list.innerHTML='';
+  if(!issues.length){list.innerHTML=emptyH('🎉','No Issues Found!','Dataset is clean.');return;}
+  issues.forEach(iss=>{
+    const d=document.createElement('div');d.className=`icard s${iss.severity.slice(0,2)}`;
+    d.dataset.cat=iss.category;d.dataset.sev=iss.severity;
+    d.innerHTML=`<div class="ihdr"><div class="ititle">${iss.description}</div><div class="imeta"><span class="badge ${sb[iss.severity]}">${iss.severity}</span><span class="badge ${cb[iss.category]||'b-info'}">${iss.category}</span></div></div><div class="icause">🔍 <strong>Root Cause:</strong> ${iss.rootCause}</div><div class="ifix">💡 ${iss.fix}<span style="margin-left:auto;font-size:.72rem;color:var(--t3)">${(iss.affectedRows||0).toLocaleString()} rows · ${iss.affectedPct||0}%</span></div>`;
+    list.appendChild(d);
+  });
+}
+let _cat='all',_sev=null;
+window.fcat=function(cat,btn){q('.fb:not([data-sev])').forEach(b=>b.classList.remove('on'));btn.classList.add('on');_cat=cat;applyF();};
+window.fsev=function(sev,btn){if(btn.classList.contains('on')){btn.classList.remove('on');_sev=null;}else{q('.fb[data-sev]').forEach(b=>b.classList.remove('on'));btn.classList.add('on');_sev=sev;}applyF();};
+function applyF(){q('.icard').forEach(c=>{const ok=(_cat==='all'||c.dataset.cat===_cat)&&(!_sev||c.dataset.sev===_sev);c.style.display=ok?'':'none';});}
+
+function buildRemList(){
+  const list=$('rlist'),ind=$('mode-ind'),isAuto=S.mode==='auto';
+  list.innerHTML='';ind.textContent=isAuto?'⚡ Auto-Fix Active':'🔍 Suggest-Only Mode';
+  S.approved=new Set(isAuto?S.issues.map(i=>i.id):[]);
+  const ci={'Missing Data':'❓','Duplicate Records':'🔁','Outliers':'📊','Inconsistent Formats':'🔤'};
+  S.issues.forEach(iss=>{
+    const d=document.createElement('div');d.className=`rcard${isAuto?' ap':''}`;d.id=`r-${iss.id}`;
+    d.innerHTML=`<div class="ri"><h4>${ci[iss.category]||'🔧'} ${iss.fix}</h4><p>${iss.description}</p></div><div class="rbtns"><button class="ab${isAuto?' on':''}" onclick="toggleF('${iss.id}','ap',this)" title="Approve">✓</button><button class="rb" onclick="toggleF('${iss.id}','rj',this)" title="Reject">✗</button></div>`;
+    list.appendChild(d);
+  });
+}
+window.toggleF=function(id,action){
+  const card=$(`r-${id}`);if(!card)return;
+  if(action==='ap'){S.approved.add(id);card.classList.add('ap');card.classList.remove('rj');card.querySelector('.ab').classList.add('on');card.querySelector('.rb').classList.remove('on');}
+  else{S.approved.delete(id);card.classList.remove('ap');card.classList.add('rj');card.querySelector('.rb').classList.add('on');card.querySelector('.ab').classList.remove('on');}
+};
+window.selectAll=function(){S.issues.forEach(i=>window.toggleF(i.id,'ap'));};
+window.rejectAll=function(){S.issues.forEach(i=>window.toggleF(i.id,'rj'));};
+
+window.applyFixes=function(){
+  const isAuto=S.mode==='auto';
+  if(!isAuto&&!S.approved.size){toast('Approve at least one fix first','er');return;}
+  showLoad('Applying Fixes…','Running remediation pipeline');
+  setTimeout(()=>{
+    try{
+      const res=applyRemediation(S.rawDf,S.profile,S.approved,isAuto);
+      S.cleanDf=res.cleanDf;
+      const cp=profileDataset(S.cleanDf,S.headers);
+      S.scoreAfter=scoreDataset(cp);
+      S.report={fixes:res.fixes,cmp:res.cmp,scoreBefore:S.scoreBefore,scoreAfter:S.scoreAfter,shapeBefore:{rows:S.rawDf.length,cols:S.headers.length},shapeAfter:{rows:S.cleanDf.length,cols:S.headers.length}};
+      $('ctbody').innerHTML=res.cmp.map(r=>`<tr><td>${r.fix}</td><td>${r.metric}</td><td class="vb">${r.before}</td><td class="va">${r.after}</td><td class="vd">${r.improvement}</td></tr>`).join('');
+      $('cmp-sec').style.display='block';$('to-rep').disabled=false;
+      toast(`${res.fixes.length} fixes applied successfully!`,'ok');setStatus('Remediation complete');
+    }catch(err){toast(err.message,'er');}
+    finally{hideLoad();}
+  },80);
+};
+
+function renderReport(){
+  if(!S.report)return;
+  const{scoreBefore:sb,scoreAfter:sa,fixes,cmp,shapeBefore,shapeAfter}=S.report;
+  const CIRC=2*Math.PI*50;
+  const fill=$('scf');fill.style.strokeDashoffset=CIRC;$('scnum').textContent=sa.overall.toFixed(1);
+  setTimeout(()=>{fill.style.strokeDashoffset=CIRC-(sa.overall/100)*CIRC;},80);
+  const delta=+(sa.overall-sb.overall).toFixed(1);
+  if(delta>0){$('dpill').style.display='';$('sdelta').textContent=delta;}
+  const dims=[{k:'completeness',l:'Completeness',c:'#4d9fff'},{k:'uniqueness',l:'Uniqueness',c:'#a855f7'},{k:'validity',l:'Validity',c:'#ff4757'},{k:'consistency',l:'Consistency',c:'#00e5a0'}];
+  $('dimrows').innerHTML=dims.map(d=>`<div class="drow"><span class="dlbl">${d.l}</span><div class="pbar" style="flex:1"><div class="pfill" style="width:${sa[d.k]}%;background:${d.c}"></div></div><span class="dval" style="color:${d.c}">${sa[d.k].toFixed(1)}</span></div>`).join('');
+  $('ba-rb').textContent=shapeBefore.rows.toLocaleString();$('ba-ra').textContent=shapeAfter.rows.toLocaleString();
+  $('ba-mb').textContent=(S.profile?.overall?.missingCells||0).toLocaleString();$('ba-ma').textContent='0 (imputed)';
+  $('ba-db').textContent=(S.profile?.duplicates?.count||0).toLocaleString();$('ba-da').textContent='0';
+  $('ba-sb').textContent=sb.overall.toFixed(1);$('ba-sa').textContent=sa.overall.toFixed(1);
+  $('flist').innerHTML=fixes.length?fixes.map(f=>`<div style="display:flex;align-items:center;gap:10px;padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.84rem"><span style="color:var(--green)">✓</span><span>${f.fix}</span></div>`).join(''):'<p style="font-size:.84rem;color:var(--t3)">No fixes applied.</p>';
+  // Radar
+  killC('ch-radar');
+  S.charts['ch-radar']=new Chart($('ch-radar').getContext('2d'),{type:'radar',data:{labels:['Completeness','Uniqueness','Validity','Consistency'],datasets:[{label:'Before',data:[sb.completeness,sb.uniqueness,sb.validity,sb.consistency],backgroundColor:'rgba(255,71,87,.14)',borderColor:'#ff4757',pointBackgroundColor:'#ff4757',borderWidth:2},{label:'After',data:[sa.completeness,sa.uniqueness,sa.validity,sa.consistency],backgroundColor:'rgba(0,229,160,.14)',borderColor:'#00e5a0',pointBackgroundColor:'#00e5a0',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{beginAtZero:true,max:100,ticks:{display:false},grid:{color:'rgba(255,255,255,.08)'},pointLabels:{font:{size:11}},angleLines:{color:'rgba(255,255,255,.08)'}}},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:16}}}}});
+  // Donut
+  const cc={};S.issues.forEach(i=>{cc[i.category]=(cc[i.category]||0)+1;});
+  const cco={'Missing Data':'#a855f7','Duplicate Records':'#fbbf24','Outliers':'#ff4757','Inconsistent Formats':'#00e5a0'};
+  killC('ch-donut');
+  if(Object.keys(cc).length)S.charts['ch-donut']=new Chart($('ch-donut').getContext('2d'),{type:'doughnut',data:{labels:Object.keys(cc),datasets:[{data:Object.values(cc),backgroundColor:Object.keys(cc).map(c=>cco[c]||'#888'),borderColor:'transparent',hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:16}}}}});
+  // Bar
+  killC('ch-score');
+  S.charts['ch-score']=new Chart($('ch-score').getContext('2d'),{type:'bar',data:{labels:['Completeness','Uniqueness','Validity','Consistency','Overall'],datasets:[{label:'Before',data:[sb.completeness,sb.uniqueness,sb.validity,sb.consistency,sb.overall],backgroundColor:'rgba(255,71,87,.6)',borderRadius:6},{label:'After',data:[sa.completeness,sa.uniqueness,sa.validity,sa.consistency,sa.overall],backgroundColor:'rgba(0,229,160,.6)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,max:100,grid:{color:'rgba(255,255,255,.05)'}},x:{grid:{display:false}}},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:16}}}}});
+}
+
+window.dlClean=function(){
+  if(!S.cleanDf.length){toast('No clean dataset yet — apply fixes first','er');return;}
+  const cols=S.headers;
+  const csv=[cols.join(','),...S.cleanDf.map(r=>cols.map(c=>{const v=r[c]??'';const s=String(v);return(s.includes(',')||s.includes('"'))?`"${s.replace(/"/g,'""')}"`:`${s}`;}).join(','))].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'),{href:url,download:`clean_${S.filename}`}).click();
+  URL.revokeObjectURL(url);toast('✓ Clean CSV downloaded!','ok');
+};
+
+window.resetAll=function(){
+  Object.values(S.charts).forEach(c=>c.destroy());
+  Object.assign(S,{rawDf:[],cleanDf:[],headers:[],filename:'',profile:null,scoreBefore:null,scoreAfter:null,issues:[],report:null,mode:'auto',approved:new Set(),charts:{},step:1});
+  $('fi-section').style.display='none';$('analyze-btn').disabled=true;$('fi').value='';
+  $('cmp-sec').style.display='none';$('to-rep').disabled=true;$('dpill').style.display='none';
+  const btn=$('demo-btn');btn.innerHTML='🧪 Load Built-in Sample Dataset <span style="font-size:.7rem;color:var(--t3);font-weight:400">&nbsp;· 25 rows, 8 cols, real issues</span>';
+  btn.classList.remove('loaded');btn.disabled=false;
+  document.querySelector('input[name=mode][value=auto]').checked=true;
+  $('la').classList.add('sel');$('ls').classList.remove('sel');
+  gotoStep(1);setStatus('Ready');toast('Ready for a new dataset!','nf');
+};
+</script>
+</body>
+</html>
